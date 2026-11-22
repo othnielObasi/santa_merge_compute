@@ -21,4 +21,5 @@ class handler(BaseHTTPRequestHandler):
         try:
             self._send(200, _santa.status())
         except Exception as e:
+            print('ERROR', traceback.format_exc(), flush=True)
             self._send(500, {'error': repr(e), 'trace': traceback.format_exc()[-1200:]})

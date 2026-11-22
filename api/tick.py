@@ -19,10 +19,13 @@ class handler(BaseHTTPRequestHandler):
         missing = [v for v in ('GITHUB_TOKEN',) if not os.environ.get(v)]
         if not (os.environ.get('KAGGLE_API_TOKEN') or (os.environ.get('KAGGLE_USERNAME') and os.environ.get('KAGGLE_KEY'))):
             missing.append('KAGGLE_API_TOKEN (or KAGGLE_USERNAME + KAGGLE_KEY)')
-        if missing: return self._send(500, {'error': 'missing environment variables: ' + ', '.join(missing)})
+        if missing:
+            print('ERROR missing env', missing, flush=True)
+            return self._send(500, {'error': 'missing environment variables: ' + ', '.join(missing)})
         try:
             self._send(200, _santa.tick(allow_submit=(q.get('submit') or ['1'])[0] != '0'))
         except Exception as e:
+            print('ERROR', traceback.format_exc(), flush=True)
             self._send(500, {'error': repr(e), 'trace': traceback.format_exc()[-1500:]})
 
     do_POST = do_GET

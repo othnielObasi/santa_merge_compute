@@ -44,7 +44,9 @@ def kaggle(*args, timeout=120):
         cmd = os.environ.get('SANTA_KAGGLE_CMD', '').split() or [sys.executable, '-m', 'kaggle']   # override for tests
         r = subprocess.run([*cmd, *args], capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return False, 'timeout'
+        print('kaggle', args[:2], 'timeout', flush=True); return False, 'timeout'
+    if r.returncode:
+        print('kaggle', ' '.join(args[:3]), 'failed:', (r.stderr or r.stdout).strip()[-400:], flush=True)
     return r.returncode == 0, (r.stdout + r.stderr)
 
 
