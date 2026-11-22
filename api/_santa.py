@@ -81,6 +81,17 @@ def gh(method, path, body=None, raw=False):
     return data if raw else (json.loads(data) if data else {})
 
 
+def gh_check_access():
+    """Fail clearly when GITHUB_TOKEN cannot see the storage repo (GitHub answers 404 for that)."""
+    try:
+        info = gh('GET', '')
+    except urllib.error.HTTPError as e:
+        raise RuntimeError('GITHUB_TOKEN cannot access the repo %s (HTTP %d). Create the token while signed in as the '
+                           'repo owner, select that repository, and give it Contents: read and write.' % (REPO, e.code))
+    if not info.get('permissions', {}).get('push', False):
+        raise RuntimeError('GITHUB_TOKEN can read %s but cannot write to it - give it Contents: read and write.' % REPO)
+
+
 def gh_read(path, default=None):
     try:
         return gh('GET', '/contents/%s?ref=main' % path, raw=True).decode('utf-8')
@@ -258,6 +269,7 @@ def kaggle_submissions():
 def tick(budget=48.0, allow_submit=True):
     t0 = time.time(); os.makedirs(TMP, exist_ok=True)
     log = {'started': now().isoformat(timespec='seconds'), 'notebooks': [], 'events': []}
+    gh_check_access()
     P = load_puzzles()
     cfg = json.loads(gh_read('sources.json', '{}') or '{}')
     best_text = gh_read('state/best.csv', '') or ''
@@ -337,10 +349,13 @@ def tick(budget=48.0, allow_submit=True):
         files['state/log.json'] = json.dumps(runlog, indent=1)
         log['commit'] = gh_commit(files, 'vercel: ' + ('; '.join(note) if note else 'merged notebooks %s' % ', '.join(n['ref'] for n in log['notebooks'])))
     log['seconds'] = round(time.time() - t0, 1)
+    print('TICK', json.dumps({k: log.get(k) for k in ('start_total', 'total', 'code_tab', 'to_check', 'events', 'seconds')}),
+          [(n['ref'], n['status'], n['saved']) for n in log['notebooks']], flush=True)
     return log
 
 
 def status():
+    gh_check_access()
     hist = gh_read('state/history.csv', '') or ''
     runlog = json.loads(gh_read('state/log.json', '{}') or '{}')
     seen = json.loads(gh_read('state/seen_kernels.json', '{}') or '{}')
