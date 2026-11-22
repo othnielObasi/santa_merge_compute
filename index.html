@@ -45,6 +45,14 @@
   footer { color: var(--dim); font-size: 12px; margin-top: 24px; }
   a { color: var(--acc); }
   .hidden { display:none; }
+  #chart svg { width:100%; height:auto; display:block; }
+  #chart .axis { fill: var(--dim); font-size: 12px; }
+  button.on { border-color: var(--acc); color: var(--acc); }
+  #chart .grid { stroke: var(--line); stroke-width: 1; }
+  #chart .line { fill: none; stroke: var(--acc); stroke-width: 2; }
+  #chart .dot { fill: var(--acc); }
+  #chart .last { fill: var(--text); font-size: 13px; font-weight: 600; }
+  #chart .empty { color: var(--dim); font-size: 13px; padding: 18px 0; }
 </style>
 </head>
 <body>
@@ -101,6 +109,23 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">4</span> Score progress</h2>
+    <p class="hint">Every new best is recorded here (in this browser). Import <code>state/history.csv</code> from the automation repo to see its full history too.</p>
+    <div class="row" style="margin-bottom:6px"><button id="rngAll">All</button><button id="rngRecent">Last 20 bests</button></div>
+    <div id="chart" aria-label="score progress chart"></div>
+    <div class="row" style="margin-top:8px">
+      <span id="histStatus" class="status">no history yet</span>
+      <label class="btn" for="histFile">Import history.csv</label>
+      <input id="histFile" type="file" accept=".csv">
+      <button id="histDownload" disabled>Download history.csv</button>
+    </div>
+    <table id="histTable" class="hidden">
+      <thead><tr><th>time</th><th class="n">total</th><th class="n">change</th><th>from</th></tr></thead>
+      <tbody id="histRows"></tbody>
+    </table>
   </section>
 
   <footer>

@@ -83,6 +83,7 @@
     const text = new TextDecoder().decode(await readBytes(f));
     if (!Object.keys(C.programsFromCSV(text)).length) return alert('No id,program rows in that file.');
     bestText = text; await set('best', text); computeBestTotal(); refresh();
+    if (bestTotal) await record(bestTotal, 'loaded ' + f.name);
   };
   $('bestDownload').onclick = () => bestText && download('best.csv', bestText);
   $('bestForget').onclick = async () => { if (!confirm('Forget the best file stored in this browser?')) return;
@@ -99,6 +100,69 @@
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
+
+
+  // ---------- score progress (history of every new best)
+  let history = [], range = 'recent';
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const stamp = () => { const d = new Date(); const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  async function record(total, note) {
+    const last = history.length ? history[history.length - 1].total : null;
+    if (last !== null && total >= last) return;
+    history.push({ time: stamp(), total, note: note || '' });
+    await set('history', history); drawHistory();
+  }
+  function drawHistory() {
+    const box = $('chart');
+    $('histStatus').textContent = history.length ? `${history.length} points · ${fmt(history[0].total)} → ${fmt(history[history.length - 1].total)}` : 'no history yet';
+    $('histStatus').className = 'status' + (history.length ? ' ok' : '');
+    $('histDownload').disabled = !history.length;
+    if (!history.length) { box.innerHTML = '<div class="empty">Your first merge starts the graph.</div>'; $('histTable').classList.add('hidden'); return; }
+    const shown = range === 'recent' ? history.slice(-20) : history;
+    $('rngAll').className = range === 'all' ? 'on' : ''; $('rngRecent').className = range === 'recent' ? 'on' : '';
+    const W = 380, H = 230, L = 58, R = 10, T = 22, B = 26;
+    const pts = shown.map(h => ({ t: Date.parse(h.time.replace(' ', 'T')) || 0, v: h.total }));
+    if (pts.length === 1) pts.push({ t: pts[0].t + 60000, v: pts[0].v });
+    const t0 = pts[0].t, t1 = Math.max(pts[pts.length - 1].t, t0 + 60000);
+    let lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
+    const pad = Math.max(3, (hi - lo) * 0.08); lo -= pad; hi += pad;
+    const X = t => L + (W - L - R) * (t - t0) / (t1 - t0), Y = v => T + (H - T - B) * (hi - v) / (hi - lo);
+    let d = ''; pts.forEach((p, i) => { d += i ? ` L${X(p.t).toFixed(1)},${Y(pts[i - 1].v).toFixed(1)} L${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}` : `M${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`; });
+    let g = '';
+    for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4, y = Y(v).toFixed(1);
+      g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="axis" x="${L - 6}" y="${(+y + 4).toFixed(1)}" text-anchor="end">${fmt(Math.round(v))}</text>`; }
+    const lab = t => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    g += `<text class="axis" x="${L}" y="${H - 8}">${esc(lab(t0))}</text><text class="axis" x="${W - R}" y="${H - 8}" text-anchor="end">${esc(lab(t1))}</text>`;
+    const lp = pts[pts.length - 1];
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="total instructions over time, lower is better">${g}<path class="line" d="${d}"/>` +
+      shown.map(h => `<circle class="dot" cx="${X(Date.parse(h.time.replace(' ', 'T')) || t0).toFixed(1)}" cy="${Y(h.total).toFixed(1)}" r="3"/>`).join('') +
+      `<text class="last" x="${Math.min(X(lp.t), W - R).toFixed(1)}" y="${(Y(lp.v) - 9).toFixed(1)}" text-anchor="end">${fmt(lp.v)}</text></svg>`;
+    const tb = $('histRows'); tb.innerHTML = '';
+    history.slice(-12).reverse().forEach((h, i, arr) => {
+      const prev = history[history.length - 1 - i - 1];
+      const tr = document.createElement('tr');
+      [h.time.slice(5).replace('-', '/'), fmt(h.total), prev ? '−' + fmt(prev.total - h.total) : '', h.note].forEach((v, j) => {
+        const td = document.createElement('td'); td.textContent = v; if (j === 1 || j === 2) td.className = 'n' + (j === 2 && v ? ' gain' : ''); tr.append(td); });
+      tb.append(tr);
+    });
+    $('histTable').classList.remove('hidden');
+  }
+  $('rngAll').onclick = () => { range = 'all'; drawHistory(); };
+  $('rngRecent').onclick = () => { range = 'recent'; drawHistory(); };
+  $('histFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return; e.target.value = '';
+    const rows = C.parseCSV(new TextDecoder().decode(await readBytes(f)));
+    const head = (rows[0] || []).map(x => x.trim());
+    const it = head.indexOf('time'), is = head.indexOf('score') >= 0 ? head.indexOf('score') : head.indexOf('total'), inote = head.indexOf('note');
+    if (it < 0 || is < 0) return alert('Expected columns time and score (like state/history.csv).');
+    const merged = history.concat(rows.slice(1).map(r => ({ time: r[it], total: Number(r[is]), note: (inote >= 0 ? r[inote] : '') || 'imported' })).filter(h => h.time && h.total));
+    merged.sort((a, b) => a.time.localeCompare(b.time));
+    history = []; for (const h of merged) if (!history.length || h.total < history[history.length - 1].total) history.push(h);
+    await set('history', history); drawHistory();
+  };
+  $('histDownload').onclick = () => download('history.csv', 'time,score,note\r\n' +
+    history.map(h => `${h.time},${h.total},"${String(h.note).replace(/"/g, '""')}"`).join('\r\n') + '\r\n');
 
   // ---------- merge
   $('merge').onclick = async () => {
@@ -126,7 +190,8 @@
       const total = C.total(best);
       lastCSV = C.toCSV(P, best);
       const improved = before === null || total < before;
-      if (improved) { bestText = lastCSV; bestTotal = total; await set('best', bestText); }
+      if (improved) { bestText = lastCSV; bestTotal = total; await set('best', bestText);
+        await record(total, files.map(f => f.name).slice(0, 3).join(', ') + (files.length > 3 ? ' …' : '')); }
 
       $('total').textContent = fmt(total);
       $('delta').textContent = before !== null && total < before ? `−${fmt(before - total)}` : '';
@@ -153,5 +218,6 @@
   (async () => {
     const pt = await get('puzzles'); if (pt) { try { P = C.loadPuzzles(pt); } catch (e) { /* ignore */ } }
     bestText = (await get('best')) || null; computeBestTotal(); refresh();
+    history = (await get('history')) || []; drawHistory();
   })();
 })();

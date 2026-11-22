@@ -21,6 +21,8 @@ Two ways to use it:
 1. Open the site. Load `puzzles.csv` once (competition **Data** page) – it stays in your browser, never uploaded.
 2. Optional: load your current best file. Every merge starts from it and it updates itself when a merge is better.
 3. Add zips / CSVs / notebooks → **Merge & verify** → **Download submission.csv**.
+4. **Score progress**: every new best is drawn on a graph (all / last 20 bests) with a table of what saved what.
+   Import `state/history.csv` from the automation repo to include its full history; download it as `history.csv`.
 
 Kaggle links can't be fetched from a browser (they need your Kaggle API key): open the notebook on Kaggle → *Output* →
 download, then add that zip. Or use the command line, which fetches links itself.
