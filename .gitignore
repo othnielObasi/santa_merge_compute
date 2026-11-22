@@ -1,0 +1,5 @@
+# competition data and submissions stay local (Kaggle rules: do not republish the data)
+*.csv
+*.zip
+__pycache__/
+.vercel

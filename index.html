@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Santa 2026 · Merge</title>
+<meta name="description" content="Merge Santa 2026 Elf Calculator programs from zips, CSVs and notebooks into one verified submission.csv - entirely in your browser.">
+<style>
+  :root { --bg:#0f1720; --card:#17212c; --line:#263444; --text:#e8eef4; --dim:#93a4b5; --acc:#e0b04a; --ok:#58c98b; --bad:#ef6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom: 18px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing:.2px; }
+  h1 span { color: var(--acc); }
+  .best { font-variant-numeric: tabular-nums; color: var(--dim); }
+  .best b { color: var(--text); font-size: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 6px; display:flex; gap:8px; align-items:center; }
+  .num { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--line); font-size:12px; }
+  .hint { color: var(--dim); font-size: 13px; margin: 4px 0 10px; }
+  .status { font-size: 14px; }
+  .status.ok::before { content:'✓ '; color: var(--ok); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button, .btn { appearance:none; border:1px solid var(--line); background:#1e2b38; color:var(--text); padding:9px 14px;
+    border-radius:8px; font:inherit; cursor:pointer; }
+  button:hover, .btn:hover { border-color:#3a4d63; }
+  button.primary { background: var(--acc); color:#1b1405; border-color: var(--acc); font-weight: 600; }
+  button:disabled { opacity:.45; cursor: default; }
+  input[type=file] { display:none; }
+  #drop { border: 1.5px dashed #3a4d63; border-radius: 10px; padding: 22px 12px; text-align:center; color: var(--dim); cursor:pointer; }
+  #drop.over { border-color: var(--acc); color: var(--text); }
+  ul.files { list-style:none; padding:0; margin:10px 0 0; font-size: 13px; }
+  ul.files li { display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px solid var(--line); word-break: break-all; }
+  ul.files li button { padding:2px 8px; font-size:12px; white-space:nowrap; flex-shrink:0; }
+  table { width:100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); vertical-align: top; }
+  td.n, th.n { text-align:right; white-space: nowrap; }
+  td.name { word-break: break-all; }
+  .gain { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--bad); }
+  .total { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+  .delta { color: var(--ok); font-size: 15px; margin-left: 8px; }
+  #log { color: var(--dim); font-size: 13px; min-height: 1.4em; }
+  footer { color: var(--dim); font-size: 12px; margin-top: 24px; }
+  a { color: var(--acc); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Santa 2026 · <span>Merge</span></h1>
+    <div class="best">your best: <b id="bestTop">–</b></div>
+  </header>
+
+  <section class="card">
+    <h2><span class="num">1</span> puzzles.csv</h2>
+    <p class="hint">Once. Download it from the competition's Data page. It stays in this browser and is never uploaded.</p>
+    <div class="row">
+      <span id="puzStatus" class="status">not loaded</span>
+      <label class="btn" for="puzFile">Choose puzzles.csv</label>
+      <input id="puzFile" type="file" accept=".csv,.zip">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">2</span> Your best so far</h2>
+    <p class="hint">Every merge starts from it, and it updates itself when a merge is better. Load a best.csv / submission file to replace it.</p>
+    <div class="row">
+      <span id="bestStatus" class="status">none yet</span>
+      <label class="btn" for="bestFile">Load a file</label>
+      <input id="bestFile" type="file" accept=".csv">
+      <button id="bestDownload" disabled>Download best</button>
+      <button id="bestForget" disabled>Forget</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">3</span> Add what you collected</h2>
+    <p class="hint">Results zips, CSV files and notebooks (.ipynb) - Pardheev's GIFT cells and Asterios's CHANGE cells are read out of the
+      notebook (its code is never run). For a Kaggle link: open it on Kaggle → <i>Output</i> → download, and add the zip here.</p>
+    <div id="drop" tabindex="0">Tap to choose files, or drop them here<br><small>.zip · .csv · .ipynb - as many as you like</small></div>
+    <input id="addFiles" type="file" multiple accept=".zip,.csv,.ipynb">
+    <ul id="fileList" class="files"></ul>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <button id="merge" class="primary" disabled>Merge &amp; verify</button>
+      <span id="log"></span>
+    </div>
+    <div id="result" class="hidden">
+      <div class="total"><span id="total"></span><span id="delta" class="delta"></span></div>
+      <div class="hint" id="verdict"></div>
+      <div class="row" style="margin:8px 0">
+        <button id="download" class="primary">Download submission.csv</button>
+      </div>
+      <table>
+        <thead><tr><th>source</th><th class="n">valid</th><th class="n">file total</th><th class="n">saved</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Everything runs in your browser: files never leave your device. Every program is replayed under the competition rules
+    (positive integers, exact division, value limit, registers, every target produced) before it can be kept.
+    Command-line version that also fetches Kaggle links: <code>santa_merge.py</code> in the repository.
+  </footer>
+</main>
+<script src="vendor/fflate.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
