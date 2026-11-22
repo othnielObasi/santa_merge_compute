@@ -20,6 +20,25 @@ REPO = os.environ.get('GITHUB_REPO', 'othniel74/santa2026compete')
 TMP = '/tmp/santa'
 os.environ.setdefault('KAGGLE_CONFIG_DIR', '/tmp/kaggle_cfg')
 os.makedirs(os.environ['KAGGLE_CONFIG_DIR'], exist_ok=True)
+
+
+def _kaggle_credentials():
+    """Accept any of: KAGGLE_API_TOKEN; KAGGLE_USERNAME + KAGGLE_KEY (legacy key or a new API token pasted as the key)."""
+    cfg, user, key = os.environ['KAGGLE_CONFIG_DIR'], os.environ.get('KAGGLE_USERNAME', '').strip(), os.environ.get('KAGGLE_KEY', '').strip()
+    tok = os.environ.get('KAGGLE_API_TOKEN', '').strip()
+    if not tok and key.startswith('KGAT_'):          # a new-style API token stored under KAGGLE_KEY
+        tok = key
+    if tok:
+        os.environ['KAGGLE_API_TOKEN'] = tok
+        open(os.path.join(cfg, 'access_token'), 'w').write(tok)
+    if user and key and not key.startswith('KGAT_'):  # legacy kaggle.json credentials
+        p = os.path.join(cfg, 'kaggle.json')
+        open(p, 'w').write(json.dumps({'username': user, 'key': key})); os.chmod(p, 0o600)
+    for p in (os.path.join(cfg, 'access_token'), os.path.join(cfg, 'kaggle.json')):
+        if os.path.exists(p): os.chmod(p, 0o600)
+
+
+_kaggle_credentials()
 now = lambda: datetime.datetime.now(datetime.timezone.utc)
 
 
