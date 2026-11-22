@@ -1,0 +1,5 @@
+kaggle==2.2.5
+kagglesdk==0.1.38
+protobuf<7
+python-dateutil<3
+urllib3<2.8

@@ -65,6 +65,27 @@
     <div class="best">your best: <b id="bestTop">–</b></div>
   </header>
 
+  <section class="card" id="autoCard">
+    <h2><span class="num"><i>A</i></span> Automatic - runs by itself</h2>
+    <p class="hint">Every minute the site checks the Kaggle Code tab (best scores first), downloads each new notebook's .ipynb and,
+      once its run has finished, its output; merges; and submits when the result beats your best Kaggle score.
+      Nothing to upload. Enter your site password once on this device to see it.</p>
+    <div class="row" id="keyRow">
+      <input id="siteKey" type="password" placeholder="site password" autocomplete="current-password"
+        style="flex:1;min-width:160px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0f1720;color:var(--text);font:inherit">
+      <button id="keySave">Save</button>
+    </div>
+    <div id="autoStatus" class="status" style="margin-top:8px">not connected</div>
+    <div class="row" style="margin-top:8px">
+      <button id="checkNow" class="primary" disabled>Check now</button>
+      <button id="bestNow" disabled>Download current best</button>
+      <button id="keyForget" class="hidden">Forget password</button>
+    </div>
+    <div id="autoLog" class="hint" style="white-space:pre-wrap;margin-top:8px"></div>
+  </section>
+
+  <h2 style="font-size:14px;color:var(--dim);margin:22px 4px 10px">Or merge files by hand</h2>
+
   <div id="needPuz" class="card warn hidden">
     <b>One-time step:</b> this page needs the competition's <code>puzzles.csv</code> to check programs.
     Download it from the <a href="https://www.kaggle.com/competitions/santa-2026/data" target="_blank" rel="noopener">Kaggle Data page</a>

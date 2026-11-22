@@ -171,6 +171,54 @@
   $('histDownload').onclick = () => download('history.csv', 'time,score,note\r\n' +
     history.map(h => `${h.time},${h.total},"${String(h.note).replace(/"/g, '""')}"`).join('\r\n') + '\r\n');
 
+
+  // ---------- automatic mode (Vercel functions api/tick + api/status)
+  let siteKey = ''; try { siteKey = localStorage.getItem('santaKey') || ''; } catch (e) { /* no storage */ }
+  const autoLog = t => { $('autoLog').textContent = t; };
+  async function api(path) {
+    const r = await fetch(`${path}?key=${encodeURIComponent(siteKey)}`, { cache: 'no-store' });
+    let j = {}; try { j = await r.json(); } catch (e) { /* not json */ }
+    if (!r.ok) throw Object.assign(new Error(j.error || ('HTTP ' + r.status)), { status: r.status });
+    return j;
+  }
+  function showKeyUI() {
+    $('keyRow').classList.toggle('hidden', !!siteKey); $('keyForget').classList.toggle('hidden', !siteKey);
+    $('checkNow').disabled = !siteKey; $('bestNow').disabled = !siteKey;
+  }
+  async function loadStatus() {
+    showKeyUI(); if (!siteKey) return;
+    $('autoStatus').textContent = 'loading …'; $('autoStatus').className = 'status';
+    try {
+      const st = await api('/api/status');
+      if (st.history && st.history.length) { history = st.history; drawHistory(); }
+      const last = st.history && st.history.length ? st.history[st.history.length - 1] : null;
+      const sub = st.submits && st.submits.length ? st.submits[st.submits.length - 1] : null;
+      $('autoStatus').textContent = (last ? `best ${fmt(last.total)} (${last.time})` : 'no history yet') +
+        ` · ${st.notebooks_merged} notebooks merged` + (sub ? ` · last submit ${fmt(sub.score)} at ${sub.time.replace('T', ' ').slice(0, 16)}` : '');
+      $('autoStatus').className = 'status ok';
+    } catch (e) {
+      $('autoStatus').textContent = e.status === 401 ? 'wrong password' : 'not ready: ' + e.message;
+      if (e.status === 401) { siteKey = ''; try { localStorage.removeItem('santaKey'); } catch (x) { /* */ } showKeyUI(); }
+    }
+  }
+  $('keySave').onclick = () => { siteKey = $('siteKey').value.trim(); if (!siteKey) return;
+    try { localStorage.setItem('santaKey', siteKey); } catch (e) { /* memory only */ } $('siteKey').value = ''; loadStatus(); };
+  $('keyForget').onclick = () => { siteKey = ''; try { localStorage.removeItem('santaKey'); } catch (e) { /* */ } showKeyUI(); $('autoStatus').textContent = 'not connected'; };
+  $('bestNow').onclick = () => { if (siteKey) window.location.href = `/api/best?key=${encodeURIComponent(siteKey)}`; };
+  $('checkNow').onclick = async () => {
+    $('checkNow').disabled = true; autoLog('checking the Code tab … (up to a minute)');
+    try {
+      const r = await api('/api/tick');
+      const lines = [`Code tab: ${r.code_tab} notebooks, ${r.to_check} new or re-run`];
+      for (const n of r.notebooks || []) lines.push(`  ${n.ref}${n.title_score ? ' (' + fmt(n.title_score) + ')' : ''}: ${n.status}${n.saved ? ', saved ' + n.saved : ''}${n.status === 'running' || n.status === 'queued' ? ' - retried next minute' : ''}`);
+      lines.push(`total ${r.start_total ? fmt(r.start_total) : '?'} → ${r.total ? fmt(r.total) : '?'}`);
+      for (const e of r.events || []) lines.push(e);
+      lines.push(`(${r.seconds}s)`); autoLog(lines.join('\n'));
+      await loadStatus();
+    } catch (e) { autoLog('check failed: ' + e.message); }
+    $('checkNow').disabled = !siteKey;
+  };
+
   // ---------- merge
   $('merge').onclick = async () => {
     if (!P) { const s1 = $('step1'); s1.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -230,5 +278,6 @@
     const pt = await get('puzzles'); if (pt) { try { P = C.loadPuzzles(pt); } catch (e) { /* ignore */ } }
     bestText = (await get('best')) || null; computeBestTotal(); refresh();
     history = (await get('history')) || []; drawHistory();
+    loadStatus();
   })();
 })();

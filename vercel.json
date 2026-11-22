@@ -1,9 +1,29 @@
 {
   "cleanUrls": true,
   "headers": [
-    { "source": "/(.*)", "headers": [
-      { "key": "X-Content-Type-Options", "value": "nosniff" },
-      { "key": "Referrer-Policy", "value": "no-referrer" }
-    ] }
-  ]
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/tick.py": {
+      "maxDuration": 60
+    },
+    "api/status.py": {
+      "maxDuration": 30
+    },
+    "api/best.py": {
+      "maxDuration": 30
+    }
+  }
 }

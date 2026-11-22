@@ -37,6 +37,28 @@ Static site, no build step.
 
 (CLI alternative: `npm i -g vercel && vercel --prod` in this folder.)
 
+## Automatic mode (no uploads at all)
+
+The site can do the whole job by itself - what you'd otherwise do by hand on the competition's Code tab:
+list the notebooks (best score first, newest first) → skip ones already merged → check each one's run status →
+download its `.ipynb` at once and its output once the run has finished (still running → retried next minute) →
+replay every program, keep the shortest per puzzle → submit when better than everything on your Kaggle submissions
+list (≥ 60 min apart, within the daily cap) → save best / history / seen-list in the private automation repo.
+
+Endpoints (Python functions in `api/`): `/api/tick` (one check), `/api/status` (history + submissions for the graph),
+`/api/best` (current best as submission.csv). All need `?key=SITE_PASSWORD`.
+
+### One-time setup
+1. Vercel → project → **Settings → Environment Variables** (Production):
+   - `KAGGLE_API_TOKEN` - from kaggle.com → Settings → API → *Generate New Token*
+     (or `KAGGLE_USERNAME` + `KAGGLE_KEY` from kaggle.json)
+   - `GITHUB_TOKEN` - GitHub fine-grained token, repository `othniel74/santa2026compete`, **Contents: read and write**
+   - `SITE_PASSWORD` - any password
+   Then **Deployments → … → Redeploy** so the functions see them.
+2. https://cron-job.org (free) → create cron job: URL `https://santamergecompute.vercel.app/api/tick?key=<SITE_PASSWORD>`,
+   every 1 minute, request timeout 60 s.
+3. Open the site, enter the password in card **A**. Press **Check now** to run one check immediately.
+
 ## Command line
 
 ```bash
