@@ -25,9 +25,17 @@ now = lambda: datetime.datetime.now(datetime.timezone.utc)
 
 # ------------------------------------------------------------------ helpers
 def authorized(query, headers):
-    pw = os.environ.get('SITE_PASSWORD', '')
-    given = (query.get('key') or [''])[0] or headers.get('x-site-key', '')
-    return bool(pw) and given == pw
+    """Password from ?key=, the x-site-key header, or 'Authorization: Bearer <password>'. Spaces around it are ignored."""
+    pw = os.environ.get('SITE_PASSWORD', '').strip()
+    auth = headers.get('authorization', '')
+    given = ((query.get('key') or [''])[0] or headers.get('x-site-key', '') or
+             (auth[7:] if auth.lower().startswith('bearer ') else '')).strip()
+    ok = bool(pw) and given == pw
+    if not ok:   # diagnostic without revealing anything secret
+        print('auth refused: password set on server=%s, sent via %s, length sent=%d expected=%d' % (
+            bool(pw), 'query' if query.get('key') else 'x-site-key' if headers.get('x-site-key') else
+            'authorization' if auth else 'nothing', len(given), len(pw)), flush=True)
+    return ok
 
 
 def kaggle(*args, timeout=120):
