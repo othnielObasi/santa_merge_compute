@@ -136,7 +136,12 @@
       <div class="hint" id="verdict"></div>
       <div class="row" style="margin:8px 0">
         <button id="download" class="primary">Download submission.csv</button>
+        <button id="submitKaggle" class="primary">Submit to Kaggle</button>
       </div>
+      <div class="row" style="margin:0 0 8px">
+        <input id="subMsg" placeholder="submission message" style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0f1720;color:var(--text);font:inherit">
+      </div>
+      <div id="subLog" class="hint"></div>
       <table>
         <thead><tr><th>source</th><th class="n">valid</th><th class="n">file total</th><th class="n">saved</th></tr></thead>
         <tbody id="rows"></tbody>

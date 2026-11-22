@@ -266,12 +266,30 @@
         td(r.gain ? '−' + fmt(r.gain) : '', 'n' + (r.gain ? ' gain' : ''));
         tb.append(tr);
       }
+      $('subMsg').value = 'merge ' + total; $('subLog').textContent = '';
       $('result').classList.remove('hidden');
       log(''); refresh();
     } catch (err) { log(''); alert(err.message); }
     $('merge').disabled = false;
   };
   $('download').onclick = () => lastCSV && download('submission.csv', lastCSV);
+  $('submitKaggle').onclick = async () => {
+    if (!lastCSV) return;
+    if (!siteKey) { $('subLog').textContent = 'Enter your site password in card A first (it is what lets this site submit for you).';
+      $('autoCard').scrollIntoView({ behavior: 'smooth' }); return; }
+    const total = $('total').textContent.replace(/,/g, '');
+    const msg = $('subMsg').value.trim() || ('merge ' + total);
+    if (!confirm(`Submit ${$('total').textContent} to Kaggle now?\n\nkaggle competitions submit -c santa-2026 -f submission.csv -m "${msg}"`)) return;
+    $('submitKaggle').disabled = true; $('subLog').textContent = 'checking every program on the server and submitting …';
+    try {
+      const r = await fetch(`/api/submit?key=${encodeURIComponent(siteKey)}&message=${encodeURIComponent(msg)}`,
+        { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: lastCSV });
+      let j = {}; try { j = await r.json(); } catch (e) { /* not json */ }
+      $('subLog').textContent = r.ok ? `✓ Submitted ${fmt(j.submitted)} to Kaggle ("${j.message}"). Check your Submissions page for the score.`
+        : 'Not submitted: ' + (j.error || 'HTTP ' + r.status);
+    } catch (e) { $('subLog').textContent = 'Not submitted: ' + e.message; }
+    $('submitKaggle').disabled = false;
+  };
 
   // ---------- restore saved state
   (async () => {

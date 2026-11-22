@@ -24,6 +24,9 @@
     },
     "api/best.py": {
       "maxDuration": 30
+    },
+    "api/submit.py": {
+      "maxDuration": 60
     }
   }
 }
