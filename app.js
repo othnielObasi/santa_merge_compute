@@ -47,7 +47,7 @@
     $('bestStatus').className = 'status' + (bestTotal ? ' ok' : '');
     $('bestTop').textContent = bestTotal ? fmt(bestTotal) : '–';
     $('bestDownload').disabled = !bestText; $('bestForget').disabled = !bestText;
-    $('merge').disabled = !P || (!files.length && !bestText);
+    $('needPuz').classList.toggle('hidden', !!P);
     const ul = $('fileList'); ul.innerHTML = '';
     files.forEach((f, i) => {
       const li = document.createElement('li');
@@ -65,19 +65,21 @@
   }
 
   // ---------- inputs
-  $('puzFile').onchange = async e => {
-    const f = e.target.files[0]; if (!f) return; e.target.value = '';
+  // puzzles.csv from a csv or from inside a zip (e.g. the competition data zip); returns true if found
+  async function tryPuzzles(f, quiet) {
     try {
-      let bytes = await readBytes(f), text;
+      let bytes = await readBytes(f);
       if (f.name.toLowerCase().endsWith('.zip')) {
         const z = window.fflate.unzipSync(bytes, { filter: x => /(^|\/)puzzles\.csv$/i.test(x.name) });
-        const k = Object.keys(z)[0]; if (!k) throw new Error('no puzzles.csv inside this zip'); bytes = z[k];
-      }
-      text = new TextDecoder().decode(bytes);
+        const k = Object.keys(z)[0]; if (!k) { if (!quiet) alert('No puzzles.csv inside this zip.'); return false; }
+        bytes = z[k];
+      } else if (!/(^|\/)puzzles[^/]*\.csv$/i.test(f.name) && quiet) return false;
+      const text = new TextDecoder().decode(bytes);
       P = C.loadPuzzles(text); await set('puzzles', text);
-      computeBestTotal(); refresh();
-    } catch (err) { alert(err.message); }
-  };
+      computeBestTotal(); refresh(); return true;
+    } catch (err) { if (!quiet) alert(err.message); return false; }
+  }
+  $('puzFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; e.target.value = ''; await tryPuzzles(f, false); };
   $('bestFile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return; e.target.value = '';
     const text = new TextDecoder().decode(await readBytes(f));
@@ -89,8 +91,13 @@
   $('bestForget').onclick = async () => { if (!confirm('Forget the best file stored in this browser?')) return;
     bestText = null; bestTotal = null; await set('best', undefined); refresh(); };
 
-  function addFiles(list) {
-    for (const f of list) if (/\.(zip|csv|ipynb)$/i.test(f.name) && !files.some(x => x.name === f.name && x.size === f.size)) files.push(f);
+  async function addFiles(list) {
+    for (const f of list) {
+      if (!/\.(zip|csv|ipynb)$/i.test(f.name)) continue;
+      if (/(^|\/)puzzles[^/]*\.csv$/i.test(f.name)) { await tryPuzzles(f, false); continue; }
+      if (!P && /\.zip$/i.test(f.name) && /santa|data/i.test(f.name) && await tryPuzzles(f, true)) continue;
+      if (!files.some(x => x.name === f.name && x.size === f.size)) files.push(f);
+    }
     refresh();
   }
   const drop = $('drop');
@@ -166,6 +173,10 @@
 
   // ---------- merge
   $('merge').onclick = async () => {
+    if (!P) { const s1 = $('step1'); s1.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      s1.classList.remove('flash'); void s1.offsetWidth; s1.classList.add('flash');
+      $('log').textContent = 'Load puzzles.csv first (step 1) - one time only.'; return; }
+    if (!files.length && !bestText) { $('log').textContent = 'Add some files in step 3 first.'; return; }
     $('merge').disabled = true; $('result').classList.add('hidden');
     const log = t => { $('log').textContent = t; };
     try {
