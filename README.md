@@ -55,8 +55,8 @@ Endpoints (Python functions in `api/`): `/api/tick` (one check), `/api/status` (
    - `GITHUB_TOKEN` - GitHub fine-grained token, repository `othniel74/santa2026compete`, **Contents: read and write**
    - `SITE_PASSWORD` - any password
    Then **Deployments → … → Redeploy** so the functions see them.
-2. https://cron-job.org (free) → create cron job: URL `https://santamergecompute.vercel.app/api/tick?key=<SITE_PASSWORD>`,
-   every 1 minute, request timeout 60 s.
+2. https://cron-job.org (free) → create cron job: URL `https://santamergecompute.vercel.app/api/tick`, every 1 minute,
+   request timeout 60 s, header `x-site-key: <SITE_PASSWORD>` (keeps the password out of request logs).
 3. Open the site, enter the password in card **A**. Press **Check now** to run one check immediately.
 
 ## Command line
