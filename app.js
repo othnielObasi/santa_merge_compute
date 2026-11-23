@@ -185,6 +185,36 @@
     $('keyRow').classList.toggle('hidden', !!siteKey); $('keyForget').classList.toggle('hidden', !siteKey);
     $('checkNow').disabled = !siteKey; $('bestNow').disabled = !siteKey;
   }
+  // everything a new device needs comes from the server once the password is known
+  async function syncFromServer() {
+    if (!siteKey) return;
+    if (!P) {                                              // puzzles.csv straight from Kaggle via the site
+      try {
+        const r = await fetch(`/api/puzzles?key=${encodeURIComponent(siteKey)}`, { cache: 'no-store' });
+        if (r.ok) { const t = await r.text(); P = C.loadPuzzles(t); await set('puzzles', t); computeBestTotal(); refresh(); }
+      } catch (e) { /* manual upload still possible */ }
+    }
+    if (!P) return;
+    try {                                                  // shared best: take it if better, send ours if ours is better
+      const r = await fetch(`/api/best?key=${encodeURIComponent(siteKey)}`, { cache: 'no-store' });
+      if (r.ok) {
+        const t = await r.text(); const b = C.startBest(P, t);
+        const serverTotal = b.size === P.size ? C.total(b) : null;
+        if (serverTotal && (!bestTotal || serverTotal < bestTotal)) {
+          bestText = t; await set('best', t); computeBestTotal(); refresh(); await record(bestTotal, 'shared best');
+        } else if (bestTotal && serverTotal && bestTotal < serverTotal) { pushBest('this device'); }
+      }
+    } catch (e) { /* offline */ }
+  }
+  async function pushBest(note) {
+    if (!siteKey || !bestText) return;
+    try {
+      const r = await fetch(`/api/save?key=${encodeURIComponent(siteKey)}&note=${encodeURIComponent(note || 'manual merge')}`,
+        { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: bestText });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.saved) $('autoLog').textContent = `Shared best updated to ${fmt(j.total)} - every device now starts from it.`;
+    } catch (e) { /* will retry on next sync */ }
+  }
   async function loadStatus() {
     showKeyUI(); if (!siteKey) return;
     $('autoStatus').textContent = 'loading …'; $('autoStatus').className = 'status';
@@ -197,9 +227,13 @@
         ` · ${st.notebooks_merged} notebooks merged` + (sub ? ` · last submit ${fmt(sub.score)} at ${sub.time.replace('T', ' ').slice(0, 16)}` : '');
       $('autoStatus').className = 'status ok';
     } catch (e) {
-      $('autoStatus').textContent = e.status === 401 ? 'wrong password' : 'not ready: ' + e.message;
-      if (e.status === 401) { siteKey = ''; try { localStorage.removeItem('santaKey'); } catch (x) { /* */ } showKeyUI(); }
+      if (e.status === 401) {
+        $('autoStatus').textContent = 'wrong password';
+        siteKey = ''; try { localStorage.removeItem('santaKey'); } catch (x) { /* */ } showKeyUI(); return;
+      }
+      $('autoStatus').textContent = '✓ password OK - shared storage not connected yet: ' + e.message;
     }
+    syncFromServer();
   }
   $('keySave').onclick = () => { siteKey = $('siteKey').value.trim(); if (!siteKey) return;
     try { localStorage.setItem('santaKey', siteKey); } catch (e) { /* memory only */ } $('siteKey').value = ''; loadStatus(); };
@@ -250,7 +284,8 @@
       lastCSV = C.toCSV(P, best);
       const improved = before === null || total < before;
       if (improved) { bestText = lastCSV; bestTotal = total; await set('best', bestText);
-        await record(total, files.map(f => f.name).slice(0, 3).join(', ') + (files.length > 3 ? ' …' : '')); }
+        await record(total, files.map(f => f.name).slice(0, 3).join(', ') + (files.length > 3 ? ' …' : ''));
+        pushBest(files.map(f => f.name).slice(0, 2).join(', ')); }
 
       $('total').textContent = fmt(total);
       $('delta').textContent = before !== null && total < before ? `−${fmt(before - total)}` : '';

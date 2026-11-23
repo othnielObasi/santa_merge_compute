@@ -16,7 +16,10 @@ import base64, csv, datetime, glob, io, json, os, re, shutil, subprocess, sys, t
 
 csv.field_size_limit(1 << 30)
 COMP = 'santa-2026'
-REPO = os.environ.get('GITHUB_REPO', 'othniel74/santa2026compete')
+# private repo that stores best.csv / history / seen-list; the first one GITHUB_TOKEN can write to is used
+REPO_CANDIDATES = [r for r in (os.environ.get('GITHUB_REPO', '').strip(), 'othniel74/santa2026compete',
+                               'othnielObasi/santa2026-automation') if r]
+REPO = REPO_CANDIDATES[0]
 TMP = '/tmp/santa'
 os.environ.setdefault('KAGGLE_CONFIG_DIR', '/tmp/kaggle_cfg')
 os.makedirs(os.environ['KAGGLE_CONFIG_DIR'], exist_ok=True)
@@ -81,15 +84,25 @@ def gh(method, path, body=None, raw=False):
     return data if raw else (json.loads(data) if data else {})
 
 
+_REPO_OK = None
+
+
 def gh_check_access():
-    """Fail clearly when GITHUB_TOKEN cannot see the storage repo (GitHub answers 404 for that)."""
-    try:
-        info = gh('GET', '')
-    except urllib.error.HTTPError as e:
-        raise RuntimeError('GITHUB_TOKEN cannot access the repo %s (HTTP %d). Create the token while signed in as the '
-                           'repo owner, select that repository, and give it Contents: read and write.' % (REPO, e.code))
-    if not info.get('permissions', {}).get('push', False):
-        raise RuntimeError('GITHUB_TOKEN can read %s but cannot write to it - give it Contents: read and write.' % REPO)
+    """Pick the first storage repo GITHUB_TOKEN can write to; fail with a clear message if none."""
+    global REPO, _REPO_OK
+    if _REPO_OK: REPO = _REPO_OK; return
+    tried = []
+    for cand in REPO_CANDIDATES:
+        REPO = cand
+        try:
+            info = gh('GET', '')
+        except urllib.error.HTTPError as e:
+            tried.append('%s (HTTP %d)' % (cand, e.code)); continue
+        if info.get('permissions', {}).get('push', False):
+            _REPO_OK = cand; print('storage repo:', cand, flush=True); return
+        tried.append('%s (read-only)' % cand)
+    raise RuntimeError('storage: GITHUB_TOKEN cannot write to any of: ' + ', '.join(tried) +
+                       '. Give the token Contents: read and write on one of these repositories.')
 
 
 def gh_read(path, default=None):
@@ -354,6 +367,30 @@ def tick(budget=48.0, allow_submit=True):
     return log
 
 
+def save_best(text, note='manual merge'):
+    """Merge an uploaded submission into the stored best (shortest per puzzle); commit if better."""
+    gh_check_access()
+    P = load_puzzles()
+    up = csv_programs(text)
+    best = {}
+    for k, prog in csv_programs(gh_read('state/best.csv', '') or '').items():
+        if k in P and check(P[k], prog): best[k] = prog
+    before = sum(len(v) for v in best.values()) if len(best) == len(P) else None
+    for k, prog in up.items():
+        if k in P:
+            n = check(P[k], prog)
+            if n and (k not in best or n < len(best[k])): best[k] = prog
+    if len(best) != len(P): raise RuntimeError('only %d of %d puzzles have a valid program' % (len(best), len(P)))
+    total = sum(len(v) for v in best.values())
+    if before is not None and total >= before:
+        return {'saved': False, 'total': before, 'note': 'stored best is already as good'}
+    text = to_csv(P, best)
+    hist = (gh_read('state/history.csv', 'time,score,source,note\n') or 'time,score,source,note\n').rstrip('\n')
+    hist += '\n%s,%d,site,"%s"\n' % (now().strftime('%Y-%m-%d %H:%M'), total, note.replace('"', "'")[:80])
+    gh_commit({'state/best.csv': text, 'dataset/best.csv': text, 'state/history.csv': hist}, 'site: new best %d' % total)
+    return {'saved': True, 'total': total, 'before': before}
+
+
 def status():
     gh_check_access()
     hist = gh_read('state/history.csv', '') or ''
@@ -362,4 +399,4 @@ def status():
     rows = list(csv.DictReader(io.StringIO(hist))) if hist else []
     return {'history': [{'time': r['time'], 'total': int(r['score']), 'note': (r.get('source', '') + ' ' + r.get('note', '')).strip()} for r in rows if r.get('score')],
             'submits': runlog.get('submits', [])[-10:], 'last_run': runlog.get('last_run'),
-            'notebooks_merged': len(seen), 'checked_at': now().isoformat(timespec='seconds')}
+            'notebooks_merged': len(seen), 'checked_at': now().isoformat(timespec='seconds'), 'storage': REPO}

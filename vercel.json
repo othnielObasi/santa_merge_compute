@@ -27,6 +27,12 @@
     },
     "api/submit.py": {
       "maxDuration": 60
+    },
+    "api/puzzles.py": {
+      "maxDuration": 30
+    },
+    "api/save.py": {
+      "maxDuration": 60
     }
   }
 }
