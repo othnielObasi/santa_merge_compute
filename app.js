@@ -238,20 +238,37 @@
   $('keySave').onclick = () => { siteKey = $('siteKey').value.trim(); if (!siteKey) return;
     try { localStorage.setItem('santaKey', siteKey); } catch (e) { /* memory only */ } $('siteKey').value = ''; loadStatus(); };
   $('keyForget').onclick = () => { siteKey = ''; try { localStorage.removeItem('santaKey'); } catch (e) { /* */ } showKeyUI(); $('autoStatus').textContent = 'not connected'; };
-  $('bestNow').onclick = () => { if (siteKey) window.location.href = `/api/best?key=${encodeURIComponent(siteKey)}`; };
-  $('checkNow').onclick = async () => {
-    $('checkNow').disabled = true; autoLog('checking the Code tab … (up to a minute)');
+  $('bestNow').onclick = async () => {                  // fetch, check, then save - works the same on phones
+    if (!siteKey) return;
+    $('bestNow').disabled = true; autoLog('downloading the current best …');
+    try {
+      const r = await fetch(`/api/best?key=${encodeURIComponent(siteKey)}`, { cache: 'no-store' });
+      const t = await r.text();
+      if (!r.ok) throw new Error(t || ('HTTP ' + r.status));
+      let name = 'submission.csv';
+      if (P) { const b = C.startBest(P, t); if (b.size === P.size) name = `submission_${C.total(b)}.csv`; }
+      download(name, t); autoLog(`downloaded ${name}`);
+    } catch (e) { autoLog('download failed: ' + e.message); }
+    $('bestNow').disabled = !siteKey;
+  };
+  let ticking = false;
+  async function runCheck(quiet) {
+    if (ticking || !siteKey) return; ticking = true;
+    $('checkNow').disabled = true; if (!quiet) autoLog('checking the Code tab … (up to 30 s)');
     try {
       const r = await api('/api/tick');
       const lines = [`Code tab: ${r.code_tab} notebooks, ${r.to_check} new or re-run`];
       for (const n of r.notebooks || []) lines.push(`  ${n.ref}${n.title_score ? ' (' + fmt(n.title_score) + ')' : ''}: ${n.status}${n.saved ? ', saved ' + n.saved : ''}${n.status === 'running' || n.status === 'queued' ? ' - retried next minute' : ''}`);
       lines.push(`total ${r.start_total ? fmt(r.start_total) : '?'} → ${r.total ? fmt(r.total) : '?'}`);
       for (const e of r.events || []) lines.push(e);
-      lines.push(`(${r.seconds}s)`); autoLog(lines.join('\n'));
+      lines.push(`(${r.seconds}s, ${new Date().toLocaleTimeString()})`); autoLog(lines.join('\n'));
       await loadStatus();
-    } catch (e) { autoLog('check failed: ' + e.message); }
-    $('checkNow').disabled = !siteKey;
-  };
+    } catch (e) { if (!quiet) autoLog('check failed: ' + e.message); }
+    $('checkNow').disabled = !siteKey; ticking = false;
+  }
+  $('checkNow').onclick = () => runCheck(false);
+  // while this page is open and visible, it also checks once a minute by itself
+  setInterval(() => { if (siteKey && document.visibilityState === 'visible') runCheck(true); }, 60000);
 
   // ---------- merge
   $('merge').onclick = async () => {
