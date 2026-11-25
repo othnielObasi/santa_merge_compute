@@ -311,7 +311,8 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
     log['start_total'] = before
 
     skip = set(cfg.get('discover', {}).get('ignore', []))
-    own = {k.lower() for k in cfg.get('kernels', []) if 'watcher' not in k}         # our own search notebooks
+    search = cfg.get('search_kernels', [])                                         # our own search notebooks
+    own = {k.lower() for k in search}
     rows = list_code_tab(cfg.get('discover', {}).get('best_scores', 25), cfg.get('discover', {}).get('page_size', 60), own)
     todo, dup = [], set()
     for ref, t, title in rows:
@@ -398,7 +399,7 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
                 runlog['dataset_score'] = cur; runlog['dataset_time'] = now().isoformat(timespec='seconds'); note.append('dataset %d' % cur)
     # restart one finished (or flagged) search notebook per tick, once the dataset has had 5 minutes to process
     if cfg.get('restart_search_now') and not runlog.get('restart_all_done'):
-        runlog['restart_pending'] = sorted(set(runlog.get('restart_pending', [])) | {k for k in cfg.get('kernels', []) if 'watcher' not in k})
+        runlog['restart_pending'] = sorted(set(runlog.get('restart_pending', [])) | set(search))
         runlog['restart_all_done'] = True; note.append('restart requested')
     if not cfg.get('restart_search_now'): runlog.pop('restart_all_done', None)
     pend = runlog.get('restart_pending', [])
