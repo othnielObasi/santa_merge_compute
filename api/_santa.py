@@ -317,15 +317,18 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
     for ref, t, title in rows:
         if '/' in ref and ref not in skip and ref not in dup and seen.get(ref) != t:
             todo.append((ref, t, title_score(title))); dup.add(ref)
-    todo.sort(key=lambda x: (x[2] is None, x[2] or 0))
+    todo.sort(key=lambda x: (x[0].lower() in own, x[2] is None, x[2] or 0))
     log['code_tab'] = len({r for r, _, _ in rows}); log['to_check'] = len(todo)
 
     changed_seen = False
     for ref, t, ts in todo:
         if time.time() - t0 > budget - 12: log['events'].append('time budget reached, rest on next tick'); break
         d = os.path.join(TMP, 'nb', ref.replace('/', '__')); shutil.rmtree(d, ignore_errors=True); os.makedirs(d)
-        kaggle('kernels', 'pull', ref, '-p', d, timeout=60)                         # the .ipynb, at once
         st = status_of(ref)
+        if ref.lower() not in own:                                                  # own search notebooks: output only
+            kaggle('kernels', 'pull', ref, '-p', d, timeout=60)                     # the .ipynb, at once
+        elif st not in ('complete', 'error', 'cancelled'):
+            log['notebooks'].append({'ref': ref, 'title_score': ts, 'status': st, 'saved': 0}); continue
         if st == 'complete':
             kaggle('kernels', 'output', ref, '-p', d, timeout=90)                    # its output, once finished
         gain = 0
