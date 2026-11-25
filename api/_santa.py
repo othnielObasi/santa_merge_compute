@@ -275,11 +275,17 @@ def kaggle_submissions():
     for v in vals:
         try: sc.append(float(str(v).strip()))
         except Exception: pass
+    # submissions still being scored have no score yet: use the number in their description (e.g. "vercel 128251")
+    raw = [json.dumps(r) for r in rows] if ',' in head else body
+    for line in raw:
+        if 'COMPLETE' not in line and 'ERROR' not in line:
+            m = re.search(r'\b(1[2-3]\d),?(\d{3})\b', line.split('.csv', 1)[-1])
+            if m: sc.append(float(m.group(1) + m.group(2)))
     return (int(min(sc)) if sc else None), n
 
 
 # ------------------------------------------------------------------ one check
-def tick(budget=48.0, allow_submit=True):
+def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s timeout; the rest waits for the next minute
     t0 = time.time(); os.makedirs(TMP, exist_ok=True)
     log = {'started': now().isoformat(timespec='seconds'), 'notebooks': [], 'events': []}
     gh_check_access()
@@ -339,15 +345,22 @@ def tick(budget=48.0, allow_submit=True):
         note.append('new best %d' % total)
         open(os.path.join(TMP, 'submission.csv'), 'w').write(text)
 
-    # submit: better than everything on Kaggle, >= 60 min since the last automatic submit, within the daily cap
+    # submit: better than everything on Kaggle, within the daily cap (optional minimum gap from sources.json)
     if allow_submit and total:
         last = max([s.get('time', '') for s in runlog.get('submits', [])] or [''])
-        gap_ok = not last or (now() - datetime.datetime.fromisoformat(last.replace('Z', '+00:00'))).total_seconds() >= 3600
+        gap_min = float(cfg.get('min_minutes_between_submits', 0) or 0)
+        gap_ok = not last or (now() - datetime.datetime.fromisoformat(last.replace('Z', '+00:00'))).total_seconds() >= gap_min * 60
         if gap_ok and time.time() - t0 < budget - 6:
             kb, kn = kaggle_submissions()
-            known = [x for x in (kb, cfg.get('already_submitted_floor')) if x]
+            mine = [s.get('score') for s in runlog.get('submits', [])[-5:]]       # our own recent submits, even if still scoring
+            known = [x for x in (kb, cfg.get('already_submitted_floor'), *mine) if x]
             floor = min(known) if known else None
-            if (floor is None or floor - total >= cfg.get('min_gain_to_submit', 1)) and kn < cfg.get('max_submits_per_day', 4):
+            cap = cfg.get('max_submits_per_day', 20)
+            if floor is not None and floor - total < cfg.get('min_gain_to_submit', 1):
+                log['events'].append('not submitted: %d is not better than %d already on Kaggle' % (total, floor))
+            elif kn >= cap:
+                log['events'].append('not submitted: %d submissions today, daily limit %d' % (kn, cap))
+            else:
                 p = os.path.join(TMP, 'submission.csv')
                 if not os.path.exists(p): open(p, 'w').write(to_csv(P, best))
                 ok, out = kaggle('competitions', 'submit', '-c', COMP, '-f', p, '-m', 'vercel %d' % total, timeout=120)
