@@ -343,6 +343,9 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
         log['notebooks'].append({'ref': ref, 'title_score': ts, 'status': st, 'saved': gain})
         if st in ('complete', 'error', 'cancelled'):
             seen[ref] = t; changed_seen = True                                       # still running -> next tick retries
+            if ref.lower() in own:                                                   # finished search run: start it again
+                pend = runlog.setdefault('restart_pending', [])
+                if ref not in pend: pend.append(ref); changed_seen = True
 
     total = sum(len(v) for v in best.values()) if len(best) == len(P) else None
     log['total'] = total
@@ -380,6 +383,34 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
                 if ok:
                     runlog.setdefault('submits', []).append({'date': now().date().isoformat(), 'time': now().isoformat(timespec='minutes'), 'score': total})
                     note.append('submitted %d' % total)
+    # keep the Kaggle dataset santa-2026-best equal to the current best, so search notebooks start from it
+    cur = total or before
+    ds_id = cfg.get('own_dataset', 'othnielobasi/santa-2026-best')
+    if cur and (runlog.get('dataset_score') is None or cur < runlog['dataset_score']) and time.time() - t0 < budget - 8:
+        last_ds = runlog.get('dataset_time')
+        if not last_ds or (now() - datetime.datetime.fromisoformat(last_ds)).total_seconds() >= 15 * 60:
+            dsd = os.path.join(TMP, 'ds'); shutil.rmtree(dsd, ignore_errors=True); os.makedirs(dsd)
+            json.dump({'title': ds_id.split('/')[1], 'id': ds_id, 'licenses': [{'name': 'CC0-1.0'}]}, open(os.path.join(dsd, 'dataset-metadata.json'), 'w'))
+            open(os.path.join(dsd, 'best.csv'), 'w').write(to_csv(P, best))
+            ok, out = kaggle('datasets', 'version', '-p', dsd, '-m', 'best %d' % cur, timeout=60)
+            log['events'].append(('dataset updated to %d' % cur) if ok else ('dataset update failed: ' + out[-160:]))
+            if ok:
+                runlog['dataset_score'] = cur; runlog['dataset_time'] = now().isoformat(timespec='seconds'); note.append('dataset %d' % cur)
+    # restart one finished (or flagged) search notebook per tick, once the dataset has had 5 minutes to process
+    if cfg.get('restart_search_now') and not runlog.get('restart_all_done'):
+        runlog['restart_pending'] = sorted(set(runlog.get('restart_pending', [])) | {k for k in cfg.get('kernels', []) if 'watcher' not in k})
+        runlog['restart_all_done'] = True; note.append('restart requested')
+    if not cfg.get('restart_search_now'): runlog.pop('restart_all_done', None)
+    pend = runlog.get('restart_pending', [])
+    ds_ready = runlog.get('dataset_score') == cur and runlog.get('dataset_time') and \
+        (now() - datetime.datetime.fromisoformat(runlog['dataset_time'])).total_seconds() >= 5 * 60
+    if pend and ds_ready and time.time() - t0 < budget - 10:
+        ref = pend[0]; kd = os.path.join(TMP, 'push'); shutil.rmtree(kd, ignore_errors=True); os.makedirs(kd)
+        ok1, out1 = kaggle('kernels', 'pull', ref, '-p', kd, '-m', timeout=60)
+        ok2, out2 = kaggle('kernels', 'push', '-p', kd, timeout=90) if ok1 else (False, out1)
+        log['events'].append(('restarted %s from %d' % (ref, cur)) if ok2 else ('restart %s failed: %s' % (ref, out2[-160:])))
+        if ok2 or 'not found' in out2.lower():
+            pend.pop(0); note.append('restart %s' % ref.split('/')[-1])
     if changed_seen: files['state/seen_kernels.json'] = json.dumps(seen, indent=1, sort_keys=True)
     if files or note:
         runlog['last_run'] = {'time': now().isoformat(timespec='minutes'), 'score': total}
