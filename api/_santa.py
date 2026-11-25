@@ -224,20 +224,28 @@ def to_csv(P, best):
 
 
 # ------------------------------------------------------------------ the Code tab
-def list_code_tab(best_scores=25, newest=60):
+def list_code_tab(best_scores=25, newest=60, own=()):
+    """Code-tab notebooks (best scores + newest) plus your own search notebooks listed in sources.json."""
     rows = []
-    for sort, size in (('scoreAscending', best_scores), ('dateRun', newest)):
-        ok, out = kaggle('kernels', 'list', '--competition', COMP, '--sort-by', sort, '--page-size', str(size), '--csv')
+    queries = [('--competition', COMP, '--sort-by', 'scoreAscending', '--page-size', str(best_scores)),
+               ('--competition', COMP, '--sort-by', 'dateRun', '--page-size', str(newest))]
+    if own: queries.append(('--mine', '--page-size', '100'))
+    for qargs in queries:
+        mine = '--mine' in qargs
+        ok, out = kaggle('kernels', 'list', *qargs, '--csv')
         if not ok: continue
         lines = [l for l in out.splitlines() if l.strip()]
         hi = next((i for i, l in enumerate(lines) if l.split(',')[0].strip() == 'ref' or l.split()[0] == 'ref'), None)
         if hi is None: continue
         if ',' in lines[hi]:
             for r in csv.DictReader(lines[hi:]):
-                rows.append((r.get('ref', '').strip(), (r.get('lastRunTime') or '').strip(), (r.get('title') or '').strip()))
+                ref = r.get('ref', '').strip()
+                if mine and ref.lower() not in own: continue
+                rows.append((ref, (r.get('lastRunTime') or '').strip(), (r.get('title') or '').strip()))
         else:                                    # table output
             for l in lines[hi + 1:]:
                 if set(l.strip()) <= set('- '): continue
+                if mine and l.split()[0].lower() not in own: continue
                 m = re.search(r'\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?', l)
                 rows.append((l.split()[0], m.group(0) if m else '', l))
     return rows
@@ -302,8 +310,9 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
     before = sum(len(v) for v in best.values()) if len(best) == len(P) else None
     log['start_total'] = before
 
-    skip = set(cfg.get('kernels', [])) | set(cfg.get('discover', {}).get('ignore', []))
-    rows = list_code_tab(cfg.get('discover', {}).get('best_scores', 25), cfg.get('discover', {}).get('page_size', 60))
+    skip = set(cfg.get('discover', {}).get('ignore', []))
+    own = {k.lower() for k in cfg.get('kernels', []) if 'watcher' not in k}         # our own search notebooks
+    rows = list_code_tab(cfg.get('discover', {}).get('best_scores', 25), cfg.get('discover', {}).get('page_size', 60), own)
     todo, dup = [], set()
     for ref, t, title in rows:
         if '/' in ref and ref not in skip and ref not in dup and seen.get(ref) != t:
