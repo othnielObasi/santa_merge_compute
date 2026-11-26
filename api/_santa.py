@@ -351,6 +351,16 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
     total = sum(len(v) for v in best.values()) if len(best) == len(P) else None
     log['total'] = total
     files, note = {}, []
+    # "hot" puzzles: programs that just changed. Fresh rewrites are where re-searching pays most, so the search
+    # notebooks get this list (hot.csv in the dataset) and work on the newest changes first.
+    hot = json.loads(gh_read('state/hot.json', '{}') or '{}')
+    old_best = csv_programs(best_text)
+    changed = [k for k in P if k in best and (k not in old_best or len(best[k]) < len(old_best[k]))]
+    stamp = now().isoformat(timespec='seconds')
+    for k in changed: hot[k] = stamp
+    cutoff = (now() - datetime.timedelta(hours=48)).isoformat(timespec='seconds')
+    hot = {k: v for k, v in hot.items() if v >= cutoff}
+    if changed: files['state/hot.json'] = json.dumps(hot, indent=0, sort_keys=True)
     if total and (before is None or total < before):
         for k in P: assert check(P[k], best[k]) is not None
         text = to_csv(P, best)
@@ -393,6 +403,8 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
             dsd = os.path.join(TMP, 'ds'); shutil.rmtree(dsd, ignore_errors=True); os.makedirs(dsd)
             json.dump({'title': ds_id.split('/')[1], 'id': ds_id, 'licenses': [{'name': 'CC0-1.0'}]}, open(os.path.join(dsd, 'dataset-metadata.json'), 'w'))
             open(os.path.join(dsd, 'best.csv'), 'w').write(to_csv(P, best))
+            with open(os.path.join(dsd, 'hot.csv'), 'w') as f:                       # newest changes first
+                f.write('id,changed\n' + ''.join('%s,%s\n' % (k, v) for k, v in sorted(hot.items(), key=lambda kv: kv[1], reverse=True)))
             ok, out = kaggle('datasets', 'version', '-p', dsd, '-m', 'best %d' % cur, timeout=60)
             log['events'].append(('dataset updated to %d' % cur) if ok else ('dataset update failed: ' + out[-160:]))
             if ok:
@@ -442,9 +454,13 @@ def save_best(text, note='manual merge'):
     if before is not None and total >= before:
         return {'saved': False, 'total': before, 'note': 'stored best is already as good'}
     text = to_csv(P, best)
+    hot = json.loads(gh_read('state/hot.json', '{}') or '{}'); stamp = now().isoformat(timespec='seconds')
+    for k, prog in up.items():
+        if k in best and best[k] is prog: hot[k] = stamp
     hist = (gh_read('state/history.csv', 'time,score,source,note\n') or 'time,score,source,note\n').rstrip('\n')
     hist += '\n%s,%d,site,"%s"\n' % (now().strftime('%Y-%m-%d %H:%M'), total, note.replace('"', "'")[:80])
-    gh_commit({'state/best.csv': text, 'dataset/best.csv': text, 'state/history.csv': hist}, 'site: new best %d' % total)
+    gh_commit({'state/best.csv': text, 'dataset/best.csv': text, 'state/history.csv': hist,
+               'state/hot.json': json.dumps(hot, indent=0, sort_keys=True)}, 'site: new best %d' % total)
     return {'saved': True, 'total': total, 'before': before}
 
 
