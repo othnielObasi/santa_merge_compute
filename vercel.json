@@ -33,6 +33,9 @@
     },
     "api/save.py": {
       "maxDuration": 60
+    },
+    "api/control.py": {
+      "maxDuration": 30
     }
   }
 }

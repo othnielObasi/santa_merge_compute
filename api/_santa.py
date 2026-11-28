@@ -372,7 +372,10 @@ def tick(budget=25.0, allow_submit=True):   # 25 s: fits cron-job.org's 30 s tim
         open(os.path.join(TMP, 'submission.csv'), 'w').write(text)
 
     # submit: better than everything on Kaggle, within the daily cap (optional minimum gap from sources.json)
-    if allow_submit and total:
+    control = json.loads(gh_read('state/control.json', '{}') or '{}')
+    if control.get('submit_paused') and allow_submit and total:
+        log['events'].append('not submitted: automatic submissions are paused')
+    if allow_submit and total and not control.get('submit_paused'):
         last = max([s.get('time', '') for s in runlog.get('submits', [])] or [''])
         gap_min = float(cfg.get('min_minutes_between_submits', 0) or 0)
         gap_ok = not last or (now() - datetime.datetime.fromisoformat(last.replace('Z', '+00:00'))).total_seconds() >= gap_min * 60
@@ -472,4 +475,14 @@ def status():
     rows = list(csv.DictReader(io.StringIO(hist))) if hist else []
     return {'history': [{'time': r['time'], 'total': int(r['score']), 'note': (r.get('source', '') + ' ' + r.get('note', '')).strip()} for r in rows if r.get('score')],
             'submits': runlog.get('submits', [])[-10:], 'last_run': runlog.get('last_run'),
-            'notebooks_merged': len(seen), 'checked_at': now().isoformat(timespec='seconds'), 'storage': REPO}
+            'notebooks_merged': len(seen), 'checked_at': now().isoformat(timespec='seconds'), 'storage': REPO,
+            'submit_paused': bool(json.loads(gh_read('state/control.json', '{}') or '{}').get('submit_paused'))}
+
+
+def set_submit_paused(paused):
+    """Pause or resume automatic submissions (merging and checking carry on either way)."""
+    gh_check_access()
+    control = json.loads(gh_read('state/control.json', '{}') or '{}')
+    control['submit_paused'] = bool(paused); control['changed'] = now().isoformat(timespec='seconds')
+    gh_commit({'state/control.json': json.dumps(control, indent=1)}, 'site: automatic submissions %s' % ('paused' if paused else 'resumed'))
+    return {'submit_paused': control['submit_paused']}

@@ -183,7 +183,13 @@
   }
   function showKeyUI() {
     $('keyRow').classList.toggle('hidden', !!siteKey); $('keyForget').classList.toggle('hidden', !siteKey);
-    $('checkNow').disabled = !siteKey; $('bestNow').disabled = !siteKey;
+    $('checkNow').disabled = !siteKey; $('bestNow').disabled = !siteKey; $('pauseBtn').disabled = !siteKey;
+  }
+  let submitPaused = false;
+  function showPause(p) {
+    submitPaused = !!p;
+    $('pauseBtn').textContent = submitPaused ? '▶ Resume auto-submit' : '⏸ Pause auto-submit';
+    $('pauseBtn').classList.toggle('primary', submitPaused);
   }
   // everything a new device needs comes from the server once the password is known
   async function syncFromServer() {
@@ -226,6 +232,8 @@
       $('autoStatus').textContent = (last ? `best ${fmt(last.total)} (${last.time})` : 'no history yet') +
         ` · ${st.notebooks_merged} notebooks merged` + (sub ? ` · last submit ${fmt(sub.score)} at ${sub.time.replace('T', ' ').slice(0, 16)}` : '');
       $('autoStatus').className = 'status ok';
+      showPause(st.submit_paused);
+      if (st.submit_paused) $('autoStatus').textContent += ' · ⏸ auto-submit PAUSED (still checking and merging)';
     } catch (e) {
       if (e.status === 401) {
         $('autoStatus').textContent = 'wrong password';
@@ -267,6 +275,20 @@
     $('checkNow').disabled = !siteKey; ticking = false;
   }
   $('checkNow').onclick = () => runCheck(false);
+  $('pauseBtn').onclick = async () => {
+    if (!siteKey) return;
+    const want = !submitPaused; $('pauseBtn').disabled = true;
+    try {
+      const r = await fetch(`/api/control?key=${encodeURIComponent(siteKey)}&paused=${want ? 1 : 0}`, { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      showPause(j.submit_paused);
+      autoLog(j.submit_paused ? 'Automatic submissions paused. The site keeps checking and merging; nothing goes to Kaggle until you resume.'
+                              : 'Automatic submissions resumed. The next check submits if your best beats Kaggle.');
+      loadStatus();
+    } catch (e) { autoLog('could not change: ' + e.message); }
+    $('pauseBtn').disabled = !siteKey;
+  };
   // while this page is open and visible, it also checks once a minute by itself
   setInterval(() => { if (siteKey && document.visibilityState === 'visible') runCheck(true); }, 60000);
 

@@ -13,7 +13,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, 'api'))
 import _santa  # noqa: E402
 
-MODULES = {n: importlib.import_module(n) for n in ('best', 'puzzles', 'save', 'status', 'submit')}
+MODULES = {n: importlib.import_module(n) for n in ('best', 'puzzles', 'save', 'status', 'submit', 'control')}
 LOCK = threading.Lock()
 LAST = {'result': None, 'at': 0.0}
 INTERVAL = float(os.environ.get('CHECK_EVERY_SECONDS', 60))
