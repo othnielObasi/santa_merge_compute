@@ -1,0 +1,22 @@
+# Render blueprint: one free web service running server.py (page + API + a check every minute).
+services:
+  - type: web
+    name: santa-merge
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SITE_PASSWORD
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        value: othnielObasi/santa2026-automation
+      - key: KAGGLE_USERNAME
+        sync: false
+      - key: KAGGLE_API_TOKEN
+        sync: false
